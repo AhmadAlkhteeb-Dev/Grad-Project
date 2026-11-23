@@ -1,0 +1,33 @@
+﻿@model SmartHR_Platform.Models.HrDashboardViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>لوحة الموارد البشرية</title>
+</head>
+<body class="bg-slate-950 text-white p-10 font-sans">
+    <div class="max-w-4xl mx-auto bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+        <span class="bg-amber-500/20 text-amber-400 text-xs px-3 py-1 rounded-full font-bold">صلاحية الموارد البشرية (HR)</span>
+        <h1 class="text-2xl font-bold mt-4">لوحة تحليلات الشركة واستقرار الكفاءات</h1>
+        <div class="grid grid-cols-3 gap-4 mt-6">
+            <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
+                <p class="text-xs text-slate-400">إجمالي الموظفين</p>
+                <p class="text-3xl font-black text-white mt-1">@Model.TotalEmployees</p>
+            </div>
+            <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
+                <p class="text-xs text-slate-400">الكفاءات المهددة</p>
+                <p class="text-3xl font-black text-rose-500 mt-1">@Model.CriticalAtRisk</p>
+            </div>
+            <div class="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
+                <p class="text-xs text-slate-400">مؤشر الاستقرار</p>
+                <p class="text-3xl font-black text-emerald-400 mt-1">@Model.CompanyStabilityIndex%</p>
+            </div>
+        </div>
+        <a href="/MultiRole/PublicVisitor" class="block mt-6 text-center text-xs text-slate-500 hover:underline">← العودة للرئيسية العامة</a>
+    </div>
+</body>
+</html>

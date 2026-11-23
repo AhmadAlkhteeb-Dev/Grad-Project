@@ -1,0 +1,26 @@
+﻿@model SmartHR_Platform.Models.PublicVisitorViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>الرئيسية - الزائر</title>
+</head>
+<body class="bg-slate-950 text-white p-10 font-sans flex items-center justify-center min-h-screen">
+    <div class="max-w-xl mx-auto text-center bg-slate-900 border border-slate-800 p-10 rounded-3xl shadow-2xl">
+        <span class="bg-cyan-500/20 text-cyan-400 text-xs px-3 py-1 rounded-full font-bold">بوابة الزوار العامّة</span>
+        <h1 class="text-3xl font-black mt-4 text-white">@Model.PlatformTitle</h1>
+        <p class="text-slate-400 text-sm mt-3 leading-relaxed">@Model.PublicMessage</p>
+
+        <div class="mt-8 grid grid-cols-2 gap-3">
+            <a href="/MultiRole/Employee" class="p-3 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs transition">دخول بوابة الموظف</a>
+            <a href="/MultiRole/Manager" class="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs transition">دخول لوحة المدير</a>
+            <a href="/MultiRole/HR" class="p-3 rounded-xl bg-amber-600 hover:bg-amber-500 font-bold text-xs transition">دخول قسم الـ HR</a>
+            <a href="/MultiRole/PublicVisitor" class="p-3 rounded-xl bg-slate-800 font-bold text-xs text-slate-400">الصفحة العامة</a>
+        </div>
+    </div>
+</body>
+</html>

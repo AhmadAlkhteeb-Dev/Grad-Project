@@ -1,0 +1,24 @@
+﻿@model SmartHR_Platform.Models.EmployeeDashboardViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>بوابة الموظف</title>
+</head>
+<body class="bg-slate-950 text-white p-10 font-sans">
+    <div class="max-w-2xl mx-auto bg-slate-900 border border-slate-800 p-8 rounded-3xl">
+        <span class="bg-blue-500/20 text-blue-400 text-xs px-3 py-1 rounded-full font-bold">صلاحية موظف (Employee)</span>
+        <h1 class="text-2xl font-bold mt-4">أهلاً بك، @Model.EmployeeName</h1>
+        <p class="text-slate-400 text-sm mt-1">القسم: @Model.Department</p>
+        <div class="mt-6 p-4 bg-slate-950 rounded-xl border border-slate-800">
+            <p class="text-xs text-slate-400">راتبك الأساسي (سري):</p>
+            <p class="text-xl font-bold text-emerald-400">@Model.Salary.ToString("C")</p>
+        </div>
+        <a href="/MultiRole/PublicVisitor" class="block mt-6 text-center text-xs text-slate-500 hover:underline">← العودة للرئيسية العامة</a>
+    </div>
+</body>
+</html>
