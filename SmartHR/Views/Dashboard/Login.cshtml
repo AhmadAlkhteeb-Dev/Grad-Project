@@ -1,86 +1,273 @@
 ﻿@model SmartHR_Platform.Models.LoginViewModel
 @{
-    ViewData["Title"] = "تسجيل الدخول | SmartHR Enterprise";
+    Layout = null;
     var demoAccounts = ViewBag.DemoAccounts as IReadOnlyList<SmartHR_Platform.Models.AuthenticatedUserSession>
                        ?? Array.Empty<SmartHR_Platform.Models.AuthenticatedUserSession>();
 }
 
-<div class="container py-5" dir="rtl">
-    <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
-            <div class="card shadow-sm border-0 rounded-4 p-4">
-                <div class="text-center mb-4">
-                    <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill mb-2">
-                        SmartHR Enterprise
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل الدخول | SmartHR Enterprise</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #f5f7fc;
+            color: #172554;
+        }
+
+        .hero-bg {
+            background: radial-gradient(circle at 12% 18%, rgba(59,130,246,.24), transparent 32%), radial-gradient(circle at 88% 82%, rgba(99,102,241,.22), transparent 32%), linear-gradient(125deg, #0b1735 0%, #142b59 55%, #1e40af 100%);
+        }
+
+        .glass {
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.15);
+            backdrop-filter: blur(15px);
+        }
+
+        .dot-pattern {
+            background-image: radial-gradient(rgba(255,255,255,.15) 1px, transparent 1px);
+            background-size: 23px 23px;
+        }
+
+        .login-btn {
+            transition: .25s;
+        }
+
+            .login-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 24px rgba(30,64,175,.28);
+            }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col hero-bg relative overflow-x-hidden">
+
+    <div class="absolute inset-0 dot-pattern opacity-40 pointer-events-none"></div>
+    <div class="absolute -top-32 -left-20 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute bottom-0 right-0 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <!-- HEADER -->
+    <header class="relative z-10 border-b border-white/10 bg-slate-950/20 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-5 lg:px-10 py-4 flex justify-between items-center gap-4">
+
+            <a asp-controller="Dashboard" asp-action="PublicHome" class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center text-white shadow-lg border border-white/15">
+                    <i data-lucide="building-2" class="w-6 h-6"></i>
+                </div>
+
+                <div>
+                    <h1 class="text-lg font-black text-white tracking-tight">
+                        SmartHR <span class="text-blue-300">Enterprise</span>
+                    </h1>
+                    <p class="text-[10px] text-blue-200/80 font-bold">
+                        INTELLIGENT HUMAN CAPITAL MANAGEMENT
+                    </p>
+                </div>
+            </a>
+
+            <a asp-controller="Dashboard" asp-action="PublicHome"
+               class="glass text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-white/15 transition">
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                العودة للرئيسية
+            </a>
+
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="relative z-10 flex-1 flex items-center justify-center px-5 py-10 lg:py-14">
+        <div class="w-full max-w-5xl grid lg:grid-cols-12 rounded-3xl overflow-hidden shadow-2xl border border-white/15">
+
+            <!-- RIGHT BRANDING PANEL -->
+            <div class="hidden lg:flex lg:col-span-5 glass text-white p-9 flex-col justify-between">
+                <div>
+                    <div class="inline-flex items-center gap-2 bg-white/10 border border-white/15 px-3.5 py-1.5 rounded-full text-[11px] font-bold mb-6">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        بوابة الدخول الموحدة (SSO / RBAC)
+                    </div>
+
+                    <h2 class="text-2xl font-black leading-relaxed mb-4">
+                        أهلاً بك في منظومة
+                        <span class="text-blue-300">SmartHR Enterprise</span>
+                    </h2>
+
+                    <p class="text-xs text-blue-100/80 leading-7 mb-8">
+                        يتم توجيهك تلقائياً بعد التحقق إلى لوحة التحكم والصلاحيات المخصصة لدورك الوظيفي داخل المؤسسة.
+                    </p>
+
+                    <div class="space-y-4">
+                        <div class="flex items-start gap-3 bg-white/5 border border-white/10 rounded-2xl p-3.5">
+                            <div class="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0">
+                                <i data-lucide="shield-check" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-extrabold">حسابات مُدارة إدارياً</p>
+                                <p class="text-[11px] text-blue-200/75 mt-0.5">لا يُسمح بالتسجيل الذاتي حفاظاً على أمن البيانات المؤسسية.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-3 bg-white/5 border border-white/10 rounded-2xl p-3.5">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                                <i data-lucide="layers" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-extrabold">عزل كامل للصلاحيات</p>
+                                <p class="text-[11px] text-blue-200/75 mt-0.5">تجربة مخصصة للموظف، المدير المباشر، الموارد البشرية، ومدير النظام.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-6 border-t border-white/10 flex items-center justify-between text-[11px] text-blue-200/75">
+                    <span>جلسة مشفّرة وآمنة</span>
+                    <span class="flex items-center gap-1.5 text-emerald-300 font-bold">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        النظام متصل
                     </span>
-                    <h4 class="fw-bold mb-1">تسجيل الدخول إلى البوابة المؤسسية</h4>
-                    <p class="text-muted small mb-0">
-                        يتم إنشاء الحسابات إدارياً وفق الدور والصلاحية داخل المنصة
+                </div>
+            </div>
+
+            <!-- LEFT LOGIN FORM CARD -->
+            <div class="lg:col-span-7 bg-white p-7 sm:p-10">
+
+                <div class="mb-7">
+                    <span class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-black px-3.5 py-1.5 rounded-full mb-3">
+                        <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                        تسجيل الدخول الآمن
+                    </span>
+                    <h3 class="text-2xl font-black text-slate-900">
+                        الدخول إلى البوابة المؤسسية
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1.5 leading-6">
+                        أدخل المعرّف الوظيفي وكلمة المرور المعتمدة من إدارة الموارد البشرية
                     </p>
                 </div>
 
                 @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
                 {
-                    <div class="alert alert-danger small">@Model.ErrorMessage</div>
+                    <div class="mb-5 flex items-center gap-2.5 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl text-xs font-bold">
+                        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+                        <span>@Model.ErrorMessage</span>
+                    </div>
                 }
 
-                <form asp-action="Login" asp-controller="Dashboard" method="post">
+                <form asp-action="Login" asp-controller="Dashboard" method="post" class="space-y-5">
                     @Html.AntiForgeryToken()
 
-                    <div class="mb-3">
-                        <label asp-for="Identifier" class="form-label fw-semibold"></label>
-                        <input asp-for="Identifier" id="loginIdentifier" class="form-control form-control-lg"
-                               placeholder="مثال: EMP-101 أو MGR-201 أو HR-301" />
-                        <span asp-validation-for="Identifier" class="text-danger small"></span>
+                    <div>
+                        <label asp-for="Identifier" class="block text-xs font-extrabold text-slate-700 mb-2"></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 pointer-events-none">
+                                <i data-lucide="id-card" class="w-4 h-4"></i>
+                            </span>
+                            <input asp-for="Identifier" id="loginIdentifier"
+                                   class="w-full pr-10 pl-4 py-3 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
+                                   placeholder="مثال: EMP-101 أو MGR-201 أو HR-301" />
+                        </div>
+                        <span asp-validation-for="Identifier" class="text-red-600 text-[11px] font-bold mt-1 block"></span>
                     </div>
 
-                    <div class="mb-4">
-                        <label asp-for="Password" class="form-label fw-semibold"></label>
-                        <div class="input-group input-group-lg">
-                            <input asp-for="Password" id="loginPassword" type="password" class="form-control"
+                    <div>
+                        <label asp-for="Password" class="block text-xs font-extrabold text-slate-700 mb-2"></label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 pointer-events-none">
+                                <i data-lucide="key-round" class="w-4 h-4"></i>
+                            </span>
+                            <input asp-for="Password" id="loginPassword" type="password"
+                                   class="w-full pr-10 pl-20 py-3 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition"
                                    placeholder="أدخل كلمة المرور" />
-                            <button type="button" class="btn btn-outline-secondary" onclick="togglePassword()">
+                            <button type="button" onclick="togglePassword()" id="togglePassBtn"
+                                    class="absolute inset-y-1.5 left-1.5 px-3 rounded-lg bg-slate-200/70 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition">
                                 إظهار
                             </button>
                         </div>
-                        <span asp-validation-for="Password" class="text-danger small"></span>
+                        <span asp-validation-for="Password" class="text-red-600 text-[11px] font-bold mt-1 block"></span>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold">
+                    <button type="submit"
+                            class="login-btn w-full bg-gradient-to-l from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white py-3.5 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-700/20">
+                        <i data-lucide="log-in" class="w-4 h-4"></i>
                         تسجيل الدخول
                     </button>
                 </form>
 
                 @if (demoAccounts.Any())
                 {
-                    <hr class="my-4" />
-                    <div class="small text-muted mb-2 fw-semibold">اختصار تعبئة حسابات الاختبار:</div>
-                    <div class="d-flex flex-wrap gap-2">
-                        @foreach (var acc in demoAccounts)
-                        {
-                            <button type="button" class="btn btn-sm btn-outline-primary"
-                                    onclick="fillDemo('@acc.Identifier', '123456')">
-                                @acc.Role (@acc.DisplayName)
-                            </button>
-                        }
+                    <div class="mt-7 pt-6 border-t border-slate-100">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-extrabold text-slate-600 flex items-center gap-1.5">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-blue-600"></i>
+                                اختصار تعبئة حسابات الاختبار:
+                            </span>
+                            <span class="text-[10px] text-slate-400 font-bold">بيئة التطوير</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            @foreach (var acc in demoAccounts)
+                            {
+                                var badgeStyle = acc.Role switch
+                                {
+                                    "Employee" => "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
+                                    "Manager" => "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100",
+                                    "HR" => "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
+                                    _ => "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200"
+                                };
+
+                                <button type="button"
+                                        onclick="fillDemo('@acc.Identifier', '123456')"
+                                        class="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-right transition @badgeStyle">
+                                    <div>
+                                        <p class="text-xs font-black">@acc.DisplayName</p>
+                                        <p class="text-[10px] opacity-75 font-bold">@acc.Identifier</p>
+                                    </div>
+                                    <span class="text-[10px] font-black px-2 py-0.5 rounded-md bg-white/80">
+                                        @acc.Role
+                                    </span>
+                                </button>
+                            }
+                        </div>
                     </div>
                 }
             </div>
         </div>
-    </div>
-</div>
+    </main>
 
-<script>
-    function togglePassword() {
-        const input = document.getElementById('loginPassword');
-        if (!input) return;
-        input.type = input.type === 'password' ? 'text' : 'password';
-    }
+    <!-- FOOTER -->
+    <footer class="relative z-10 border-t border-white/10 bg-slate-950/30 text-blue-100/70 py-4 text-center text-xs">
+        جميع الحقوق محفوظة © 2026 SmartHR Enterprise
+    </footer>
 
-    function fillDemo(id, pass) {
-        const idInput = document.getElementById('loginIdentifier');
-        const passInput = document.getElementById('loginPassword');
-        if (idInput) idInput.value = id;
-        if (passInput) passInput.value = pass;
-    }
-</script>
+    <script>
+        lucide.createIcons();
+
+        function togglePassword() {
+            const input = document.getElementById('loginPassword');
+            const btn = document.getElementById('togglePassBtn');
+            if (!input) return;
+            const isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            if (btn) btn.textContent = isHidden ? 'إخفاء' : 'إظهار';
+        }
+
+        function fillDemo(id, pass) {
+            const idInput = document.getElementById('loginIdentifier');
+            const passInput = document.getElementById('loginPassword');
+            if (idInput) idInput.value = id;
+            if (passInput) passInput.value = pass;
+        }
+    </script>
+</body>
+</html>
