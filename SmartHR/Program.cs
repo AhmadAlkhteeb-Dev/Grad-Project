@@ -1,10 +1,15 @@
-using SmartHR_Platform.Controllers;
+using Microsoft.EntityFrameworkCore;
 using SmartHR.Controllers;
+using SmartHR.Data;
+using SmartHR_Platform.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(4);
@@ -12,7 +17,7 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-builder.Services.AddSingleton<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IMultiRoleService, MultiRoleService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 

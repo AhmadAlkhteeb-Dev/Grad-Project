@@ -1,12 +1,15 @@
 ﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SmartHR.Data;
 using SmartHR_Platform.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using DbRequest = SmartHR.Models.EmployeeRequest;
 
 namespace SmartHR_Platform.Controllers
 {
@@ -47,83 +50,13 @@ namespace SmartHR_Platform.Controllers
 
     public class DashboardService : IDashboardService
     {
+        private readonly AppDbContext _dbContext;
         private static readonly object _syncLock = new();
-
-        private static readonly List<EmployeeRequest> _requests = new()
-        {
-            new EmployeeRequest
-            {
-                Id = 101,
-                EmployeeName = "سارة العلي",
-                Department = "تطوير البرمجيات",
-                Type = RequestType.SalaryRaise,
-                CurrentSalary = 950,
-                RequestedRaiseAmount = 150,
-                Details = "تولي مهام قيادة الفريق التقني وتحقيق الأهداف الربعية بنسبة 115%.",
-                CreatedAt = DateTime.Now.AddHours(-5),
-                Status = RequestStatus.Pending
-            },
-            new EmployeeRequest
-            {
-                Id = 102,
-                EmployeeName = "سارة العلي",
-                Department = "تطوير البرمجيات",
-                Type = RequestType.AnnualLeave,
-                StartDate = DateTime.Now.AddDays(3),
-                EndDate = DateTime.Now.AddDays(6),
-                Details = "إجازة سنوية مخططة مسبقاً.",
-                CreatedAt = DateTime.Now.AddDays(-2),
-                Status = RequestStatus.Approved,
-                ManagerNote = "تمت الموافقة، نتمنى لك إجازة سعيدة."
-            },
-            new EmployeeRequest
-            {
-                Id = 103,
-                EmployeeName = "سارة العلي",
-                Department = "تطوير البرمجيات",
-                Type = RequestType.SalaryAdvance,
-                AdvanceAmount = 350,
-                Details = "سلفة طارئة لتغطية مصاريف صيانة المنزل.",
-                CreatedAt = DateTime.Now.AddDays(-4),
-                Status = RequestStatus.Rejected,
-                ManagerNote = "نعتذر، يوجد سلفة سابقة لم تُستكمل أقساطها بعد."
-            },
-            new EmployeeRequest
-            {
-                Id = 104,
-                EmployeeName = "ليلى الحسن",
-                Department = "المبيعات",
-                Type = RequestType.AnnualLeave,
-                StartDate = DateTime.Now.AddDays(4),
-                EndDate = DateTime.Now.AddDays(7),
-                Details = "إجازة سنوية لمتابعة أمور شخصية.",
-                CreatedAt = DateTime.Now.AddDays(-1),
-                Status = RequestStatus.Pending
-            },
-            new EmployeeRequest
-            {
-                Id = 105,
-                EmployeeName = "موظف مجهول (سري)",
-                Department = "الدعم الفني",
-                Type = RequestType.AnonymousWhistleblowing,
-                Details = "ضغط عمل مرتفع خلال المناوبات المسائية.",
-                CreatedAt = DateTime.Now.AddHours(-12),
-                Status = RequestStatus.Pending,
-                IsAnonymous = true
-            }
-        };
 
         private static readonly List<AuditLogEntry> _auditLogs = new()
         {
             new AuditLogEntry { Id = 1, Action = "تسجيل دخول النظام", PerformedBy = "System Admin", Timestamp = DateTime.Now.AddMinutes(-45), Details = "دخول ناجح إلى لوحة التحكم المؤسسية" },
-            new AuditLogEntry { Id = 2, Action = "اعتماد طلب إجازة", PerformedBy = "المدير المباشر", Timestamp = DateTime.Now.AddDays(-1), Details = "قبول طلب الإجازة #102 للموظفة سارة العلي" },
-            new AuditLogEntry { Id = 3, Action = "استلام بلاغ سري", PerformedBy = "نظام الحماية", Timestamp = DateTime.Now.AddHours(-12), Details = "توجيه بلاغ مجهول المصدر إلى صندوق HR" }
-        };
-
-        private static readonly List<RecentDecisionItem> _recentDecisions = new()
-        {
-            new RecentDecisionItem(102, "سارة العلي", "مقبول", "تمت الموافقة، نتمنى لك إجازة سعيدة.", DateTime.Now.AddDays(-1).ToString("yyyy-MM-dd HH:mm")),
-            new RecentDecisionItem(103, "سارة العلي", "مرفوض", "نعتذر، يوجد سلفة سابقة لم تُستكمل أقساطها بعد.", DateTime.Now.AddDays(-3).ToString("yyyy-MM-dd HH:mm"))
+            new AuditLogEntry { Id = 2, Action = "ربط قاعدة البيانات", PerformedBy = "النظام", Timestamp = DateTime.Now.AddMinutes(-10), Details = "تفعيل الاتصال بقاعدة HR_SmartAnalyticsDB عبر Entity Framework Core" }
         };
 
         private static readonly List<SupportTicketItem> _supportTickets = new()
@@ -132,8 +65,97 @@ namespace SmartHR_Platform.Controllers
             new SupportTicketItem("TKT-2038", "صلاحيات", "عالية", "التحقق من عزل البلاغات السرية عن المدير المباشر.", "مفتوحة", "أمس")
         };
 
+        public DashboardService(AppDbContext dbContext)
+        {
+            _dbContext = dbContext;
+        }
+
         private static int GetNextAuditIdLocked() =>
             _auditLogs.Count > 0 ? _auditLogs.Max(a => a.Id) + 1 : 1;
+
+        private static RequestType MapDbTypeToUiType(string dbType) => dbType switch
+        {
+            "SalaryIncrease" => RequestType.SalaryRaise,
+            "Complaint" => RequestType.AnonymousWhistleblowing,
+            _ => RequestType.AnnualLeave
+        };
+
+        private static string MapUiTypeToDbType(RequestType type, bool isAnonymous)
+        {
+            if (isAnonymous || type == RequestType.AnonymousWhistleblowing)
+                return "Complaint";
+
+            return type switch
+            {
+                RequestType.SalaryRaise => "SalaryIncrease",
+                _ => "Leave"
+            };
+        }
+
+        private static RequestStatus MapDbStatusesToUiStatus(string managerStatus, string hrStatus)
+        {
+            if (managerStatus == "Rejected" || hrStatus == "Rejected")
+                return RequestStatus.Rejected;
+
+            if (managerStatus == "Approved" && hrStatus == "Approved")
+                return RequestStatus.Approved;
+
+            if (managerStatus == "Approved" && hrStatus == "Pending")
+                return RequestStatus.Pending;
+
+            return RequestStatus.Pending;
+        }
+
+        private EmployeeRequest MapToUiRequest(DbRequest dbReq)
+        {
+            bool isAnon = dbReq.RequestType == "Complaint";
+            string empName = isAnon
+                ? "موظف مجهول (سري)"
+                : (dbReq.Employee?.FullName ?? "موظف");
+
+            string deptName = isAnon
+                ? "قسم محمي"
+                : (dbReq.Employee?.Department?.DepartmentName ?? "General");
+
+            string combinedNote = string.Empty;
+            if (!string.IsNullOrWhiteSpace(dbReq.ManagerStatus) && dbReq.ManagerStatus != "Pending")
+                combinedNote = $"المدير: {dbReq.ManagerStatus}";
+            if (!string.IsNullOrWhiteSpace(dbReq.HRStatus) && dbReq.HRStatus != "Pending")
+                combinedNote = string.IsNullOrWhiteSpace(combinedNote)
+                    ? $"HR: {dbReq.HRStatus}"
+                    : $"{combinedNote} | HR: {dbReq.HRStatus}";
+
+            return new EmployeeRequest
+            {
+                Id = dbReq.RequestId,
+                EmployeeName = empName,
+                Department = deptName,
+                Type = MapDbTypeToUiType(dbReq.RequestType),
+                Details = dbReq.Description ?? dbReq.Title,
+                StartDate = dbReq.StartDate,
+                EndDate = dbReq.EndDate,
+                CurrentSalary = dbReq.Employee?.MonthlyIncome,
+                RequestedRaiseAmount = dbReq.RequestType == "SalaryIncrease" ? dbReq.RequestedAmount : null,
+                AdvanceAmount = dbReq.RequestType == "Leave" ? null : dbReq.RequestedAmount,
+                CreatedAt = dbReq.CreatedAt,
+                Status = MapDbStatusesToUiStatus(dbReq.ManagerStatus, dbReq.HRStatus),
+                ManagerNote = combinedNote,
+                IsAnonymous = isAnon
+            };
+        }
+
+        private List<EmployeeRequest> LoadAllUiRequests()
+        {
+            var dbItems = _dbContext.EmployeeRequests
+                .AsNoTracking()
+                .Include(r => r.Employee)
+                    .ThenInclude(e => e!.Department)
+                .OrderByDescending(r => r.CreatedAt)
+                .ThenByDescending(r => r.RequestId)
+                .ToList();
+
+            return dbItems.Select(MapToUiRequest).ToList();
+        }
 
         public DashboardViewData GetDashboardData(string role, string employeeName)
         {
@@ -144,35 +166,73 @@ namespace SmartHR_Platform.Controllers
             bool canViewCompanyAnalytics = normalizedRole is "Manager" or "HR";
             bool canViewAuditTrail = normalizedRole == "Admin";
 
+            var allUiRequests = LoadAllUiRequests();
+
+            var latestPredictions = _dbContext.AttritionPredictions
+                .AsNoTracking()
+                .Where(p => p.IsLatest)
+                .ToList();
+
+            int satisfactionScore = 88;
+            if (latestPredictions.Count > 0)
+            {
+                var avgRisk = latestPredictions.Average(p => (double)p.RiskProbability);
+                satisfactionScore = Math.Clamp((int)Math.Round(100.0 - avgRisk), 10, 99);
+            }
+
+            List<EmployeeRequest> visibleRequests = normalizedRole switch
+            {
+                "Employee" => allUiRequests
+                    .Where(r => !r.IsAnonymous && string.Equals(r.EmployeeName, normalizedName, StringComparison.OrdinalIgnoreCase))
+                    .ToList(),
+                "Manager" => allUiRequests
+                    .Where(r => !r.IsAnonymous)
+                    .ToList(),
+                "HR" => allUiRequests.ToList(),
+                _ => new List<EmployeeRequest>()
+            };
+
+            var allRequestsForHistory = allUiRequests.Where(r => !r.IsAnonymous).ToList();
+
+            var recentDecisions = _dbContext.EmployeeRequests
+                .AsNoTracking()
+                .Include(r => r.Employee)
+                .Where(r => r.RequestType != "Complaint" && (r.ManagerStatus != "Pending" || r.HRStatus != "Pending"))
+                .OrderByDescending(r => r.CreatedAt)
+                .Take(8)
+                .ToList()
+                .Select(r =>
+                {
+                    string decision = (r.ManagerStatus == "Rejected" || r.HRStatus == "Rejected") ? "مرفوض"
+                        : (r.ManagerStatus == "Approved" && r.HRStatus == "Approved") ? "مقبول نهائياً"
+                        : "مقبول من المدير";
+                    string note = $"المدير: {r.ManagerStatus} | HR: {r.HRStatus}";
+                    return new RecentDecisionItem(
+                        r.RequestId,
+                        r.Employee?.FullName ?? "موظف",
+                        decision,
+                        note,
+                        r.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                    );
+                })
+                .ToList();
+
+            int pendingCount = visibleRequests.Count(r => r.Status == RequestStatus.Pending);
+            int approvedCount = visibleRequests.Count(r => r.Status == RequestStatus.Approved);
+            int rejectedCount = visibleRequests.Count(r => r.Status == RequestStatus.Rejected);
+            int anonymousCount = allUiRequests.Count(r => r.IsAnonymous);
+
             lock (_syncLock)
             {
-                List<EmployeeRequest> visibleRequests = normalizedRole switch
-                {
-                    "Employee" => _requests
-                        .Where(r => !r.IsAnonymous && string.Equals(r.EmployeeName, normalizedName, StringComparison.OrdinalIgnoreCase))
-                        .ToList(),
-                    "Manager" => _requests
-                        .Where(r => !r.IsAnonymous)
-                        .ToList(),
-                    "HR" => _requests.ToList(),
-                    _ => new List<EmployeeRequest>()
-                };
-
-                var allRequestsForHistory = _requests.Where(r => !r.IsAnonymous).ToList();
-                var recentDecisions = _recentDecisions.Take(8).ToList();
-                int pendingCount = visibleRequests.Count(r => r.Status == RequestStatus.Pending);
-                int approvedCount = visibleRequests.Count(r => r.Status == RequestStatus.Approved);
-                int rejectedCount = visibleRequests.Count(r => r.Status == RequestStatus.Rejected);
-                int anonymousCount = _requests.Count(r => r.IsAnonymous);
                 var auditLogs = canViewAuditTrail ? _auditLogs.ToList() : new List<AuditLogEntry>();
                 var supportTickets = _supportTickets.ToList();
 
                 return new DashboardViewData(
                     CurrentRole: normalizedRole,
                     CurrentEmployeeName: normalizedName,
-                    CompanySatisfactionScore: 92,
+                    CompanySatisfactionScore: satisfactionScore,
                     IsManagerSatisfied: true,
-                    ManagerFeedbackSummary: "أداء متميز والتزام عالٍ بمواعيد تسليم المشاريع.",
+                    ManagerFeedbackSummary: "البيانات متصلة مباشرة بقاعدة بيانات HR_SmartAnalyticsDB.",
                     CanViewCompanyAnalytics: canViewCompanyAnalytics,
                     CanViewAuditTrail: canViewAuditTrail,
                     VisibleRequests: visibleRequests,
@@ -190,13 +250,13 @@ namespace SmartHR_Platform.Controllers
 
         public async Task SubmitRequestAsync(EmployeeRequest model, IFormFile? attachmentFile, bool isAnonymous, string webRootPath)
         {
-            model.Status = RequestStatus.Pending;
-            model.CreatedAt = DateTime.Now;
-            model.IsAnonymous = isAnonymous;
-
             string originalEmployee = string.IsNullOrWhiteSpace(model.EmployeeName)
-                ? "سارة العلي"
+                ? "طارق الزعبي"
                 : model.EmployeeName.Trim();
+
+            var employeeEntity = await _dbContext.Employees
+                .FirstOrDefaultAsync(e => e.FullName == originalEmployee || e.EmployeeCode == originalEmployee)
+                ?? await _dbContext.Employees.OrderBy(e => e.EmployeeId).FirstAsync();
 
             if (attachmentFile is { Length: > 0 })
             {
@@ -217,55 +277,66 @@ namespace SmartHR_Platform.Controllers
                 model.AttachmentName = safeFileName;
             }
 
-            if (isAnonymous)
+            string dbType = MapUiTypeToDbType(model.Type, isAnonymous);
+            string title = dbType switch
             {
-                model.EmployeeName = "موظف مجهول (سري)";
-                if (string.IsNullOrWhiteSpace(model.Department))
-                {
-                    model.Department = "قسم محمي";
-                }
-            }
-            else
+                "SalaryIncrease" => "طلب مراجعة راتب",
+                "Complaint" => "بلاغ سري مجهول",
+                _ => "طلب إجازة"
+            };
+
+            decimal? amount = model.RequestedRaiseAmount ?? model.AdvanceAmount;
+
+            var dbRequest = new DbRequest
             {
-                model.EmployeeName = originalEmployee;
-            }
+                EmployeeId = employeeEntity.EmployeeId,
+                RequestType = dbType,
+                Title = title,
+                Description = model.Details,
+                StartDate = model.StartDate,
+                EndDate = model.EndDate,
+                RequestedAmount = amount,
+                ManagerStatus = "Pending",
+                HRStatus = "Pending",
+                CreatedAt = DateTime.Now
+            };
+
+            _dbContext.EmployeeRequests.Add(dbRequest);
+            await _dbContext.SaveChangesAsync();
 
             lock (_syncLock)
             {
-                model.Id = _requests.Count > 0 ? _requests.Max(r => r.Id) + 1 : 101;
-                _requests.Insert(0, model);
-
                 _auditLogs.Insert(0, new AuditLogEntry
                 {
                     Id = GetNextAuditIdLocked(),
                     Action = isAnonymous ? "إرسال بلاغ سري مجهول" : "تقديم طلب جديد",
-                    PerformedBy = isAnonymous ? "مجهول" : originalEmployee,
+                    PerformedBy = isAnonymous ? "مجهول" : employeeEntity.FullName,
                     Timestamp = DateTime.Now,
-                    Details = $"الطلب #{model.Id} - النوع: {model.Type}"
+                    Details = $"الطلب #{dbRequest.RequestId} - النوع: {dbType}"
                 });
             }
         }
 
         public void EditRequest(int id, string? details, DateTime? startDate, DateTime? endDate, string? exitTime, decimal? advanceAmount, decimal? currentSalary, decimal? requestedRaiseAmount)
         {
-            lock (_syncLock)
+            var dbReq = _dbContext.EmployeeRequests.FirstOrDefault(r => r.RequestId == id);
+            if (dbReq != null && dbReq.ManagerStatus == "Pending" && dbReq.HRStatus == "Pending")
             {
-                var req = _requests.FirstOrDefault(r => r.Id == id);
-                if (req != null && req.Status == RequestStatus.Pending)
-                {
-                    if (details != null) req.Details = details;
-                    req.StartDate = startDate;
-                    req.EndDate = endDate;
-                    req.ExitTime = exitTime;
-                    req.AdvanceAmount = advanceAmount;
-                    req.CurrentSalary = currentSalary;
-                    req.RequestedRaiseAmount = requestedRaiseAmount;
+                if (details != null) dbReq.Description = details;
+                dbReq.StartDate = startDate;
+                dbReq.EndDate = endDate;
+                if (requestedRaiseAmount.HasValue) dbReq.RequestedAmount = requestedRaiseAmount;
+                else if (advanceAmount.HasValue) dbReq.RequestedAmount = advanceAmount;
 
+                _dbContext.SaveChanges();
+
+                lock (_syncLock)
+                {
                     _auditLogs.Insert(0, new AuditLogEntry
                     {
                         Id = GetNextAuditIdLocked(),
                         Action = "تعديل طلب معلق",
-                        PerformedBy = req.EmployeeName,
+                        PerformedBy = "مستخدم النظام",
                         Timestamp = DateTime.Now,
                         Details = $"تعديل بيانات الطلب #{id}"
                     });
@@ -275,19 +346,20 @@ namespace SmartHR_Platform.Controllers
 
         public void CancelRequest(int id)
         {
-            lock (_syncLock)
+            var dbReq = _dbContext.EmployeeRequests.FirstOrDefault(r => r.RequestId == id);
+            if (dbReq != null && dbReq.ManagerStatus == "Pending" && dbReq.HRStatus == "Pending")
             {
-                var req = _requests.FirstOrDefault(r => r.Id == id);
-                if (req != null && req.Status == RequestStatus.Pending)
-                {
-                    req.Status = RequestStatus.Cancelled;
-                    req.ManagerNote = "تم إلغاء الطلب من قِبل الموظف.";
+                dbReq.ManagerStatus = "Rejected";
+                dbReq.HRStatus = "Rejected";
+                _dbContext.SaveChanges();
 
+                lock (_syncLock)
+                {
                     _auditLogs.Insert(0, new AuditLogEntry
                     {
                         Id = GetNextAuditIdLocked(),
                         Action = "إلغاء طلب من الموظف",
-                        PerformedBy = req.EmployeeName,
+                        PerformedBy = "مستخدم النظام",
                         Timestamp = DateTime.Now,
                         Details = $"إلغاء الطلب #{id}"
                     });
@@ -297,56 +369,64 @@ namespace SmartHR_Platform.Controllers
 
         public (bool Success, string Message, object? Payload) DecideRequest(int id, bool isApproved, string? managerNote)
         {
+            var dbReq = _dbContext.EmployeeRequests
+                .Include(r => r.Employee)
+                .FirstOrDefault(r => r.RequestId == id && r.RequestType != "Complaint");
+
+            if (dbReq == null)
+            {
+                return (false, "الطلب غير موجود.", null);
+            }
+
+            if (!isApproved && string.IsNullOrWhiteSpace(managerNote))
+            {
+                return (false, "ملاحظة القرار إجبارية عند رفض الطلب.", null);
+            }
+
+            string finalNote = string.IsNullOrWhiteSpace(managerNote)
+                ? "تمت الموافقة على الطلب."
+                : managerNote.Trim();
+
+            dbReq.ManagerStatus = isApproved ? "Approved" : "Rejected";
+            if (!isApproved)
+            {
+                dbReq.HRStatus = "Rejected";
+            }
+
+            _dbContext.SaveChanges();
+
+            string decisionLabel = isApproved ? "مقبول" : "مرفوض";
+            string timeNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            string empName = dbReq.Employee?.FullName ?? "موظف";
+
             lock (_syncLock)
             {
-                var req = _requests.FirstOrDefault(r => r.Id == id && !r.IsAnonymous);
-                if (req == null)
-                {
-                    return (false, "الطلب غير موجود.", null);
-                }
-
-                if (!isApproved && string.IsNullOrWhiteSpace(managerNote))
-                {
-                    return (false, "ملاحظة القرار إجبارية عند رفض الطلب.", null);
-                }
-
-                string finalNote = string.IsNullOrWhiteSpace(managerNote)
-                    ? "تمت الموافقة على الطلب."
-                    : managerNote.Trim();
-
-                req.Status = isApproved ? RequestStatus.Approved : RequestStatus.Rejected;
-                req.ManagerNote = finalNote;
-
-                string decisionLabel = isApproved ? "مقبول" : "مرفوض";
-                string timeNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-
-                _recentDecisions.Insert(0, new RecentDecisionItem(req.Id, req.EmployeeName, decisionLabel, finalNote, timeNow));
                 _auditLogs.Insert(0, new AuditLogEntry
                 {
                     Id = GetNextAuditIdLocked(),
                     Action = isApproved ? "قبول طلب إداري" : "رفض طلب إداري",
                     PerformedBy = "المدير المباشر",
                     Timestamp = DateTime.Now,
-                    Details = $"معرف الطلب #{id} - الحالة: {req.Status}"
+                    Details = $"معرف الطلب #{id} - الحالة: {dbReq.ManagerStatus} ({finalNote})"
                 });
-
-                var managerVisible = _requests.Where(r => !r.IsAnonymous).ToList();
-                var payload = new
-                {
-                    success = true,
-                    id = req.Id,
-                    employeeName = req.EmployeeName,
-                    status = req.Status.ToString(),
-                    decisionLabel,
-                    note = finalNote,
-                    timeText = timeNow,
-                    pendingCount = managerVisible.Count(r => r.Status == RequestStatus.Pending),
-                    approvedCount = managerVisible.Count(r => r.Status == RequestStatus.Approved),
-                    rejectedCount = managerVisible.Count(r => r.Status == RequestStatus.Rejected)
-                };
-
-                return (true, "تم تحديث حالة الطلب.", payload);
             }
+
+            var managerVisible = LoadAllUiRequests().Where(r => !r.IsAnonymous).ToList();
+            var payload = new
+            {
+                success = true,
+                id = dbReq.RequestId,
+                employeeName = empName,
+                status = isApproved ? RequestStatus.Approved.ToString() : RequestStatus.Rejected.ToString(),
+                decisionLabel,
+                note = finalNote,
+                timeText = timeNow,
+                pendingCount = managerVisible.Count(r => r.Status == RequestStatus.Pending),
+                approvedCount = managerVisible.Count(r => r.Status == RequestStatus.Approved),
+                rejectedCount = managerVisible.Count(r => r.Status == RequestStatus.Rejected)
+            };
+
+            return (true, "تم تحديث حالة الطلب.", payload);
         }
 
         public (bool Success, string Message, object? Payload) BulkApprove(BulkApproveRequest? payload)
@@ -363,43 +443,43 @@ namespace SmartHR_Platform.Controllers
             string timeNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
             var updated = new List<object>();
 
-            lock (_syncLock)
+            var targetRequests = _dbContext.EmployeeRequests
+                .Include(r => r.Employee)
+                .Where(r => payload.Ids.Contains(r.RequestId) && r.RequestType != "Complaint" && r.ManagerStatus == "Pending")
+                .ToList();
+
+            foreach (var req in targetRequests)
             {
-                foreach (var id in payload.Ids)
+                req.ManagerStatus = "Approved";
+                updated.Add(new { id = req.RequestId, employeeName = req.Employee?.FullName ?? "موظف", note, timeText = timeNow });
+
+                lock (_syncLock)
                 {
-                    var req = _requests.FirstOrDefault(r => r.Id == id && !r.IsAnonymous && r.Status == RequestStatus.Pending);
-                    if (req != null)
+                    _auditLogs.Insert(0, new AuditLogEntry
                     {
-                        req.Status = RequestStatus.Approved;
-                        req.ManagerNote = note;
-
-                        _recentDecisions.Insert(0, new RecentDecisionItem(req.Id, req.EmployeeName, "مقبول (جماعي)", note, timeNow));
-                        _auditLogs.Insert(0, new AuditLogEntry
-                        {
-                            Id = GetNextAuditIdLocked(),
-                            Action = "موافقة جماعية",
-                            PerformedBy = "المدير المباشر",
-                            Timestamp = DateTime.Now,
-                            Details = $"ضمن دفعة - اعتماد الطلب #{req.Id}"
-                        });
-
-                        updated.Add(new { id = req.Id, employeeName = req.EmployeeName, note, timeText = timeNow });
-                    }
+                        Id = GetNextAuditIdLocked(),
+                        Action = "موافقة جماعية",
+                        PerformedBy = "المدير المباشر",
+                        Timestamp = DateTime.Now,
+                        Details = $"ضمن دفعة - اعتماد الطلب #{req.RequestId}"
+                    });
                 }
-
-                var managerVisible = _requests.Where(r => !r.IsAnonymous).ToList();
-                var responsePayload = new
-                {
-                    success = true,
-                    count = updated.Count,
-                    updated,
-                    pendingCount = managerVisible.Count(r => r.Status == RequestStatus.Pending),
-                    approvedCount = managerVisible.Count(r => r.Status == RequestStatus.Approved),
-                    rejectedCount = managerVisible.Count(r => r.Status == RequestStatus.Rejected)
-                };
-
-                return (true, "تمت الموافقة الجماعية.", responsePayload);
             }
+
+            _dbContext.SaveChanges();
+
+            var managerVisible = LoadAllUiRequests().Where(r => !r.IsAnonymous).ToList();
+            var responsePayload = new
+            {
+                success = true,
+                count = updated.Count,
+                updated,
+                pendingCount = managerVisible.Count(r => r.Status == RequestStatus.Pending),
+                approvedCount = managerVisible.Count(r => r.Status == RequestStatus.Approved),
+                rejectedCount = managerVisible.Count(r => r.Status == RequestStatus.Rejected)
+            };
+
+            return (true, "تمت الموافقة الجماعية.", responsePayload);
         }
 
         public (bool Success, string Message, SupportTicketItem? Ticket) SubmitSupportTicket(string? category, string? priority, string? description, string? queryEmployeeName, string? identityName)
@@ -444,18 +524,22 @@ namespace SmartHR_Platform.Controllers
 
         public byte[] BuildExecutiveReportBytes()
         {
-            lock (_syncLock)
-            {
-                var reportContent =
-                    $"=== التقرير التنفيذي الشهري لاستقرار الكفاءات (SmartHR Enterprise) ===\n" +
-                    $"تاريخ الإصدار: {DateTime.Now:yyyy-MM-dd HH:mm}\n" +
-                    $"إجمالي الطلبات المسجلة: {_requests.Count}\n" +
-                    $"الطلبات قيد الانتظار: {_requests.Count(r => r.Status == RequestStatus.Pending)}\n" +
-                    $"الطلبات المعتمدة: {_requests.Count(r => r.Status == RequestStatus.Approved)}\n" +
-                    $"البلاغات السرية المسجلة: {_requests.Count(r => r.IsAnonymous)}\n";
+            var totalRequests = _dbContext.EmployeeRequests.Count();
+            var pendingRequests = _dbContext.EmployeeRequests.Count(r => r.ManagerStatus == "Pending" || r.HRStatus == "Pending");
+            var approvedRequests = _dbContext.EmployeeRequests.Count(r => r.ManagerStatus == "Approved" && r.HRStatus == "Approved");
+            var anonymousReports = _dbContext.EmployeeRequests.Count(r => r.RequestType == "Complaint");
+            var highRiskCount = _dbContext.AttritionPredictions.Count(p => p.IsLatest && p.RiskLevel == "High");
 
-                return System.Text.Encoding.UTF8.GetBytes(reportContent);
-            }
+            var reportContent =
+                $"=== التقرير التنفيذي الشهري لاستقرار الكفاءات (SmartHR Enterprise) ===\n" +
+                $"تاريخ الإصدار: {DateTime.Now:yyyy-MM-dd HH:mm}\n" +
+                $"إجمالي الطلبات المسجلة: {totalRequests}\n" +
+                $"الطلبات قيد الانتظار: {pendingRequests}\n" +
+                $"الطلبات المعتمدة نهائياً: {approvedRequests}\n" +
+                $"البلاغات السرية المسجلة: {anonymousReports}\n" +
+                $"الموظفون ذوو الخطورة المرتفعة (AI): {highRiskCount}\n";
+
+            return System.Text.Encoding.UTF8.GetBytes(reportContent);
         }
     }
 
@@ -520,7 +604,7 @@ namespace SmartHR_Platform.Controllers
         public IActionResult Index(string? role = null, string? employeeName = null)
         {
             role ??= HttpContext.Session.GetString("SmartHR_Role") ?? "Employee";
-            employeeName ??= HttpContext.Session.GetString("SmartHR_UserName") ?? "سارة العلي";
+            employeeName ??= HttpContext.Session.GetString("SmartHR_UserName") ?? "طارق الزعبي";
 
             var data = _dashboardService.GetDashboardData(role, employeeName);
 
@@ -549,7 +633,7 @@ namespace SmartHR_Platform.Controllers
             await _dashboardService.SubmitRequestAsync(model, attachmentFile, isAnonymous, _env.WebRootPath);
 
             string originalEmployee = string.IsNullOrWhiteSpace(model.EmployeeName) || isAnonymous
-                ? HttpContext.Session.GetString("SmartHR_UserName") ?? "سارة العلي"
+                ? HttpContext.Session.GetString("SmartHR_UserName") ?? "طارق الزعبي"
                 : model.EmployeeName;
 
             if (isAnonymous)
