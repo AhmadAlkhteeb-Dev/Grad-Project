@@ -1,9 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using SmartHR.Data;
+using SmartHR.Models;
 using SmartHR_Platform.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DbEmployee = SmartHR.Models.Employee;
 
 namespace SmartHR_Platform.Controllers
 {
@@ -16,34 +19,35 @@ namespace SmartHR_Platform.Controllers
     public class AuthService : IAuthService
     {
         private readonly AppDbContext _dbContext;
+        private readonly PasswordHasher<DbEmployee> _passwordHasher = new();
 
         private static readonly List<AuthenticatedUserSession> _demoUsers = new()
         {
             new AuthenticatedUserSession
             {
-                Identifier = "EMP-1003",
-                DisplayName = "طارق الزعبي",
-                Role = "Employee",
-                Department = "Research & Development"
-            },
-            new AuthenticatedUserSession
-            {
-                Identifier = "EMP-1002",
+                Identifier = "EMP-001",
                 DisplayName = "أحمد المنصور",
-                Role = "Manager",
-                Department = "Research & Development"
+                Role = "Admin",
+                Department = "Human Resources"
             },
             new AuthenticatedUserSession
             {
-                Identifier = "EMP-1001",
+                Identifier = "EMP-002",
                 DisplayName = "سارة العلي",
                 Role = "HR",
                 Department = "Human Resources"
             },
             new AuthenticatedUserSession
             {
-                Identifier = "EMP-1004",
-                DisplayName = "ليان حداد",
+                Identifier = "EMP-003",
+                DisplayName = "خالد الزعبي",
+                Role = "Manager",
+                Department = "Sales"
+            },
+            new AuthenticatedUserSession
+            {
+                Identifier = "EMP-004",
+                DisplayName = "عمر الخطيب",
                 Role = "Employee",
                 Department = "Sales"
             }
@@ -54,6 +58,23 @@ namespace SmartHR_Platform.Controllers
             _dbContext = dbContext;
         }
 
+        private bool IsValidPassword(DbEmployee employee, string providedPassword)
+        {
+            if (string.IsNullOrWhiteSpace(employee.PasswordHash))
+                return false;
+
+            // إذا كان الهاش في الداتا بيس قيمة تجريبية نصية مؤقتة مثل HASH_123456
+            if (employee.PasswordHash.StartsWith("HASH_", StringComparison.OrdinalIgnoreCase))
+            {
+                var expectedDevPass = employee.PasswordHash["HASH_".Length..];
+                return providedPassword == expectedDevPass || providedPassword == employee.PasswordHash;
+            }
+
+            // التحقق القياسي عبر PasswordHasher<Employee>
+            var result = _passwordHasher.VerifyHashedPassword(employee, employee.PasswordHash, providedPassword);
+            return result is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded;
+        }
+
         public AuthenticatedUserSession? Authenticate(string identifier, string password)
         {
             if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(password))
@@ -61,7 +82,7 @@ namespace SmartHR_Platform.Controllers
 
             var normalizedId = identifier.Trim();
 
-            // 1. البحث المباشر في جدول Employees من قاعدة البيانات HR_SmartAnalyticsDB
+            // 1. البحث والتحقق من جدول Employees في قاعدة البيانات HR_SmartAnalyticsDB
             var dbEmployee = _dbContext.Employees
                 .AsNoTracking()
                 .Include(e => e.Department)
@@ -73,6 +94,9 @@ namespace SmartHR_Platform.Controllers
 
             if (dbEmployee != null)
             {
+                if (!IsValidPassword(dbEmployee, password))
+                    return null;
+
                 return new AuthenticatedUserSession
                 {
                     Identifier = dbEmployee.EmployeeCode,
@@ -82,35 +106,7 @@ namespace SmartHR_Platform.Controllers
                 };
             }
 
-            // 2. احتياطي للحسابات التجريبية أثناء التطوير
-            var matched = _demoUsers.FirstOrDefault(u =>
-                u.Identifier.Equals(normalizedId, StringComparison.OrdinalIgnoreCase) ||
-                u.DisplayName.Equals(normalizedId, StringComparison.OrdinalIgnoreCase));
-
-            if (matched != null)
-            {
-                return new AuthenticatedUserSession
-                {
-                    Identifier = matched.Identifier,
-                    DisplayName = matched.DisplayName,
-                    Role = matched.Role,
-                    Department = matched.Department
-                };
-            }
-
-            // 3. دخول مرن لأي معرّف جديد أثناء التطوير
-            var role = "Employee";
-            if (normalizedId.StartsWith("MGR", StringComparison.OrdinalIgnoreCase)) role = "Manager";
-            else if (normalizedId.StartsWith("HR", StringComparison.OrdinalIgnoreCase)) role = "HR";
-            else if (normalizedId.StartsWith("ADM", StringComparison.OrdinalIgnoreCase)) role = "Admin";
-
-            return new AuthenticatedUserSession
-            {
-                Identifier = normalizedId,
-                DisplayName = normalizedId,
-                Role = role,
-                Department = role == "HR" ? "Human Resources" : "Research & Development"
-            };
+            return null;
         }
 
         public IReadOnlyList<AuthenticatedUserSession> GetDemoAccounts()

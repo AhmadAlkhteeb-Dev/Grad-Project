@@ -29,7 +29,7 @@ namespace SmartHR.Controllers
 
         public EmployeeDashboardViewModel BuildEmployeeDashboard(string? employeeName = null)
         {
-            var targetName = string.IsNullOrWhiteSpace(employeeName) ? "طارق الزعبي" : employeeName.Trim();
+            var targetName = string.IsNullOrWhiteSpace(employeeName) ? "عمر الخطيب" : employeeName.Trim();
             var data = _dashboardService.GetDashboardData("Employee", targetName);
 
             var dbEmployee = _dbContext.Employees
@@ -37,7 +37,7 @@ namespace SmartHR.Controllers
                 .Include(e => e.Department)
                 .FirstOrDefault(e => e.FullName == targetName || e.EmployeeCode == targetName);
 
-            var employeeSalary = dbEmployee?.MonthlyIncome
+            var employeeSalary = dbEmployee?.CurrentSalary
                 ?? data.VisibleRequests
                     .Where(r => r.CurrentSalary.HasValue)
                     .OrderByDescending(r => r.CreatedAt)
@@ -53,7 +53,7 @@ namespace SmartHR.Controllers
                 EmployeeName = dbEmployee?.FullName ?? data.CurrentEmployeeName,
                 Department = dbEmployee?.Department?.DepartmentName
                     ?? data.VisibleRequests.FirstOrDefault()?.Department
-                    ?? "Research & Development",
+                    ?? "Sales",
                 Salary = employeeSalary,
                 MyRequests = myRequestSummaries
             };
@@ -61,7 +61,7 @@ namespace SmartHR.Controllers
 
         public ManagerDashboardViewModel BuildManagerDashboard(string? managerName = null)
         {
-            var resolvedManagerName = string.IsNullOrWhiteSpace(managerName) ? "أحمد المنصور" : managerName.Trim();
+            var resolvedManagerName = string.IsNullOrWhiteSpace(managerName) ? "خالد الزعبي" : managerName.Trim();
             var data = _dashboardService.GetDashboardData("Manager", resolvedManagerName);
 
             var dbManager = _dbContext.Employees
@@ -98,7 +98,7 @@ namespace SmartHR.Controllers
                 .Where(p => p.IsLatest)
                 .ToList();
 
-            var highRiskCount = latestPredictions.Count(p => p.RiskLevel == "High");
+            var highRiskCount = latestPredictions.Count(p => p.RiskLevel.ToLower() == "high");
 
             double stabilityIndex = latestPredictions.Count > 0
                 ? Math.Round(100.0 - latestPredictions.Average(p => (double)p.RiskProbability), 1)

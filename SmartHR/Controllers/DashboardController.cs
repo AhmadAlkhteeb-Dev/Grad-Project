@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SmartHR.Data;
+using SmartHR.Models;
 using SmartHR_Platform.Models;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DbRequest = SmartHR.Models.EmployeeRequest;
-
+using EmployeeRequest = SmartHR_Platform.Models.EmployeeRequest;
 namespace SmartHR_Platform.Controllers
 {
     public record RecentDecisionItem(int RequestId, string EmployeeName, string Decision, string Note, string TimeText);
@@ -76,18 +77,24 @@ namespace SmartHR_Platform.Controllers
         private static RequestType MapDbTypeToUiType(string dbType) => dbType switch
         {
             "SalaryIncrease" => RequestType.SalaryRaise,
-            "Complaint" => RequestType.AnonymousWhistleblowing,
+            "Complaint" => RequestType.Complaint,
+            "AnonymousReport" => RequestType.AnonymousWhistleblowing,
+            "ExitPermit" => RequestType.ExitPermission,
+            "Advance" => RequestType.SalaryAdvance,
             _ => RequestType.AnnualLeave
         };
 
         private static string MapUiTypeToDbType(RequestType type, bool isAnonymous)
         {
             if (isAnonymous || type == RequestType.AnonymousWhistleblowing)
-                return "Complaint";
+                return "AnonymousReport";
 
             return type switch
             {
                 RequestType.SalaryRaise => "SalaryIncrease",
+                RequestType.ExitPermission => "ExitPermit",
+                RequestType.SalaryAdvance => "Advance",
+                RequestType.Complaint => "Complaint",
                 _ => "Leave"
             };
         }
@@ -100,15 +107,12 @@ namespace SmartHR_Platform.Controllers
             if (managerStatus == "Approved" && hrStatus == "Approved")
                 return RequestStatus.Approved;
 
-            if (managerStatus == "Approved" && hrStatus == "Pending")
-                return RequestStatus.Pending;
-
             return RequestStatus.Pending;
         }
 
         private EmployeeRequest MapToUiRequest(DbRequest dbReq)
         {
-            bool isAnon = dbReq.RequestType == "Complaint";
+            bool isAnon = dbReq.RequestType is "AnonymousReport" || dbReq.EmployeeId == null;
             string empName = isAnon
                 ? "موظف مجهول (سري)"
                 : (dbReq.Employee?.FullName ?? "موظف");
@@ -117,13 +121,16 @@ namespace SmartHR_Platform.Controllers
                 ? "قسم محمي"
                 : (dbReq.Employee?.Department?.DepartmentName ?? "General");
 
-            string combinedNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(dbReq.ManagerStatus) && dbReq.ManagerStatus != "Pending")
-                combinedNote = $"المدير: {dbReq.ManagerStatus}";
-            if (!string.IsNullOrWhiteSpace(dbReq.HRStatus) && dbReq.HRStatus != "Pending")
-                combinedNote = string.IsNullOrWhiteSpace(combinedNote)
-                    ? $"HR: {dbReq.HRStatus}"
-                    : $"{combinedNote} | HR: {dbReq.HRStatus}";
+            string combinedNote = dbReq.ManagerNote ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(combinedNote))
+            {
+                if (!string.IsNullOrWhiteSpace(dbReq.ManagerStatus) && dbReq.ManagerStatus != "Pending")
+                    combinedNote = $"المدير: {dbReq.ManagerStatus}";
+                if (!string.IsNullOrWhiteSpace(dbReq.HRStatus) && dbReq.HRStatus != "Pending")
+                    combinedNote = string.IsNullOrWhiteSpace(combinedNote)
+                        ? $"HR: {dbReq.HRStatus}"
+                        : $"{combinedNote} | HR: {dbReq.HRStatus}";
+            }
 
             return new EmployeeRequest
             {
@@ -134,9 +141,12 @@ namespace SmartHR_Platform.Controllers
                 Details = dbReq.Description ?? dbReq.Title,
                 StartDate = dbReq.StartDate,
                 EndDate = dbReq.EndDate,
-                CurrentSalary = dbReq.Employee?.MonthlyIncome,
-                RequestedRaiseAmount = dbReq.RequestType == "SalaryIncrease" ? dbReq.RequestedAmount : null,
-                AdvanceAmount = dbReq.RequestType == "Leave" ? null : dbReq.RequestedAmount,
+                ExitTime = dbReq.ExitTime?.ToString(@"hh\:mm"),
+                AdvanceAmount = dbReq.AdvanceAmount,
+                CurrentSalary = dbReq.CurrentSalary ?? dbReq.Employee?.CurrentSalary,
+                RequestedRaiseAmount = dbReq.RequestedRaiseAmount,
+                AttachmentPath = dbReq.AttachmentPath,
+                AttachmentName = dbReq.AttachmentName,
                 CreatedAt = dbReq.CreatedAt,
                 Status = MapDbStatusesToUiStatus(dbReq.ManagerStatus, dbReq.HRStatus),
                 ManagerNote = combinedNote,
@@ -197,7 +207,7 @@ namespace SmartHR_Platform.Controllers
             var recentDecisions = _dbContext.EmployeeRequests
                 .AsNoTracking()
                 .Include(r => r.Employee)
-                .Where(r => r.RequestType != "Complaint" && (r.ManagerStatus != "Pending" || r.HRStatus != "Pending"))
+                .Where(r => r.RequestType != "AnonymousReport" && (r.ManagerStatus != "Pending" || r.HRStatus != "Pending"))
                 .OrderByDescending(r => r.CreatedAt)
                 .Take(8)
                 .ToList()
@@ -206,7 +216,9 @@ namespace SmartHR_Platform.Controllers
                     string decision = (r.ManagerStatus == "Rejected" || r.HRStatus == "Rejected") ? "مرفوض"
                         : (r.ManagerStatus == "Approved" && r.HRStatus == "Approved") ? "مقبول نهائياً"
                         : "مقبول من المدير";
-                    string note = $"المدير: {r.ManagerStatus} | HR: {r.HRStatus}";
+                    string note = string.IsNullOrWhiteSpace(r.ManagerNote)
+                        ? $"المدير: {r.ManagerStatus} | HR: {r.HRStatus}"
+                        : r.ManagerNote;
                     return new RecentDecisionItem(
                         r.RequestId,
                         r.Employee?.FullName ?? "موظف",
@@ -250,13 +262,23 @@ namespace SmartHR_Platform.Controllers
 
         public async Task SubmitRequestAsync(EmployeeRequest model, IFormFile? attachmentFile, bool isAnonymous, string webRootPath)
         {
-            string originalEmployee = string.IsNullOrWhiteSpace(model.EmployeeName)
-                ? "طارق الزعبي"
-                : model.EmployeeName.Trim();
+            string dbType = MapUiTypeToDbType(model.Type, isAnonymous);
+            bool anonFlag = isAnonymous || dbType == "AnonymousReport";
 
-            var employeeEntity = await _dbContext.Employees
-                .FirstOrDefaultAsync(e => e.FullName == originalEmployee || e.EmployeeCode == originalEmployee)
-                ?? await _dbContext.Employees.OrderBy(e => e.EmployeeId).FirstAsync();
+            Employee? employeeEntity = null;
+            if (!anonFlag)
+            {
+                string originalEmployee = string.IsNullOrWhiteSpace(model.EmployeeName)
+                    ? "عمر الخطيب"
+                    : model.EmployeeName.Trim();
+
+                employeeEntity = await _dbContext.Employees
+                    .FirstOrDefaultAsync(e => e.FullName == originalEmployee || e.EmployeeCode == originalEmployee)
+                    ?? await _dbContext.Employees.OrderBy(e => e.EmployeeId).FirstAsync();
+            }
+
+            string? attachmentPath = null;
+            string? attachmentName = null;
 
             if (attachmentFile is { Length: > 0 })
             {
@@ -273,29 +295,40 @@ namespace SmartHR_Platform.Controllers
                 using var stream = new FileStream(filePath, FileMode.Create);
                 await attachmentFile.CopyToAsync(stream);
 
-                model.AttachmentPath = "/uploads/" + uniqueFileName;
-                model.AttachmentName = safeFileName;
+                attachmentPath = "/uploads/" + uniqueFileName;
+                attachmentName = safeFileName;
             }
 
-            string dbType = MapUiTypeToDbType(model.Type, isAnonymous);
             string title = dbType switch
             {
                 "SalaryIncrease" => "طلب مراجعة راتب",
-                "Complaint" => "بلاغ سري مجهول",
+                "ExitPermit" => "طلب إذن خروج",
+                "Advance" => "طلب سلفة مالية",
+                "Complaint" => "ملاحظة إدارية",
+                "AnonymousReport" => "بلاغ سري مجهول",
                 _ => "طلب إجازة"
             };
 
-            decimal? amount = model.RequestedRaiseAmount ?? model.AdvanceAmount;
+            TimeSpan? parsedExitTime = null;
+            if (!string.IsNullOrWhiteSpace(model.ExitTime) && TimeSpan.TryParse(model.ExitTime, out var ts))
+            {
+                parsedExitTime = ts;
+            }
 
             var dbRequest = new DbRequest
             {
-                EmployeeId = employeeEntity.EmployeeId,
+                EmployeeId = anonFlag ? null : employeeEntity?.EmployeeId,
                 RequestType = dbType,
                 Title = title,
                 Description = model.Details,
                 StartDate = model.StartDate,
                 EndDate = model.EndDate,
-                RequestedAmount = amount,
+                ExitTime = parsedExitTime,
+                AdvanceAmount = model.AdvanceAmount,
+                CurrentSalary = model.CurrentSalary ?? employeeEntity?.CurrentSalary,
+                RequestedRaiseAmount = model.RequestedRaiseAmount,
+                AttachmentPath = attachmentPath,
+                AttachmentName = attachmentName,
                 ManagerStatus = "Pending",
                 HRStatus = "Pending",
                 CreatedAt = DateTime.Now
@@ -309,8 +342,8 @@ namespace SmartHR_Platform.Controllers
                 _auditLogs.Insert(0, new AuditLogEntry
                 {
                     Id = GetNextAuditIdLocked(),
-                    Action = isAnonymous ? "إرسال بلاغ سري مجهول" : "تقديم طلب جديد",
-                    PerformedBy = isAnonymous ? "مجهول" : employeeEntity.FullName,
+                    Action = anonFlag ? "إرسال بلاغ سري مجهول" : "تقديم طلب جديد",
+                    PerformedBy = anonFlag ? "مجهول" : (employeeEntity?.FullName ?? "موظف"),
                     Timestamp = DateTime.Now,
                     Details = $"الطلب #{dbRequest.RequestId} - النوع: {dbType}"
                 });
@@ -325,8 +358,11 @@ namespace SmartHR_Platform.Controllers
                 if (details != null) dbReq.Description = details;
                 dbReq.StartDate = startDate;
                 dbReq.EndDate = endDate;
-                if (requestedRaiseAmount.HasValue) dbReq.RequestedAmount = requestedRaiseAmount;
-                else if (advanceAmount.HasValue) dbReq.RequestedAmount = advanceAmount;
+                if (!string.IsNullOrWhiteSpace(exitTime) && TimeSpan.TryParse(exitTime, out var ts))
+                    dbReq.ExitTime = ts;
+                if (advanceAmount.HasValue) dbReq.AdvanceAmount = advanceAmount;
+                if (currentSalary.HasValue) dbReq.CurrentSalary = currentSalary;
+                if (requestedRaiseAmount.HasValue) dbReq.RequestedRaiseAmount = requestedRaiseAmount;
 
                 _dbContext.SaveChanges();
 
@@ -371,7 +407,7 @@ namespace SmartHR_Platform.Controllers
         {
             var dbReq = _dbContext.EmployeeRequests
                 .Include(r => r.Employee)
-                .FirstOrDefault(r => r.RequestId == id && r.RequestType != "Complaint");
+                .FirstOrDefault(r => r.RequestId == id && r.RequestType != "AnonymousReport");
 
             if (dbReq == null)
             {
@@ -388,6 +424,7 @@ namespace SmartHR_Platform.Controllers
                 : managerNote.Trim();
 
             dbReq.ManagerStatus = isApproved ? "Approved" : "Rejected";
+            dbReq.ManagerNote = finalNote;
             if (!isApproved)
             {
                 dbReq.HRStatus = "Rejected";
@@ -445,12 +482,13 @@ namespace SmartHR_Platform.Controllers
 
             var targetRequests = _dbContext.EmployeeRequests
                 .Include(r => r.Employee)
-                .Where(r => payload.Ids.Contains(r.RequestId) && r.RequestType != "Complaint" && r.ManagerStatus == "Pending")
+                .Where(r => payload.Ids.Contains(r.RequestId) && r.RequestType != "AnonymousReport" && r.ManagerStatus == "Pending")
                 .ToList();
 
             foreach (var req in targetRequests)
             {
                 req.ManagerStatus = "Approved";
+                req.ManagerNote = note;
                 updated.Add(new { id = req.RequestId, employeeName = req.Employee?.FullName ?? "موظف", note, timeText = timeNow });
 
                 lock (_syncLock)
@@ -527,8 +565,8 @@ namespace SmartHR_Platform.Controllers
             var totalRequests = _dbContext.EmployeeRequests.Count();
             var pendingRequests = _dbContext.EmployeeRequests.Count(r => r.ManagerStatus == "Pending" || r.HRStatus == "Pending");
             var approvedRequests = _dbContext.EmployeeRequests.Count(r => r.ManagerStatus == "Approved" && r.HRStatus == "Approved");
-            var anonymousReports = _dbContext.EmployeeRequests.Count(r => r.RequestType == "Complaint");
-            var highRiskCount = _dbContext.AttritionPredictions.Count(p => p.IsLatest && p.RiskLevel == "High");
+            var anonymousReports = _dbContext.EmployeeRequests.Count(r => r.RequestType == "AnonymousReport");
+            var highRiskCount = _dbContext.AttritionPredictions.Count(p => p.IsLatest && p.RiskLevel.ToLower() == "high");
 
             var reportContent =
                 $"=== التقرير التنفيذي الشهري لاستقرار الكفاءات (SmartHR Enterprise) ===\n" +
@@ -604,7 +642,7 @@ namespace SmartHR_Platform.Controllers
         public IActionResult Index(string? role = null, string? employeeName = null)
         {
             role ??= HttpContext.Session.GetString("SmartHR_Role") ?? "Employee";
-            employeeName ??= HttpContext.Session.GetString("SmartHR_UserName") ?? "طارق الزعبي";
+            employeeName ??= HttpContext.Session.GetString("SmartHR_UserName") ?? "عمر الخطيب";
 
             var data = _dashboardService.GetDashboardData(role, employeeName);
 
@@ -633,7 +671,7 @@ namespace SmartHR_Platform.Controllers
             await _dashboardService.SubmitRequestAsync(model, attachmentFile, isAnonymous, _env.WebRootPath);
 
             string originalEmployee = string.IsNullOrWhiteSpace(model.EmployeeName) || isAnonymous
-                ? HttpContext.Session.GetString("SmartHR_UserName") ?? "طارق الزعبي"
+                ? HttpContext.Session.GetString("SmartHR_UserName") ?? "عمر الخطيب"
                 : model.EmployeeName;
 
             if (isAnonymous)
